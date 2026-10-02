@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Varun's Movie Choice</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#08090d;color:#f4f5f8;font-family:Inter,system-ui,-apple-system,sans-serif}
+button,input,textarea,select{font:inherit}button{cursor:pointer}
+.app{max-width:1100px;margin:auto;padding:20px 16px 90px}
+header{display:flex;align-items:center;gap:12px;position:sticky;top:0;background:#08090de8;backdrop-filter:blur(16px);z-index:5;padding:10px 0}
+.logo{font:700 22px Georgia,serif;white-space:nowrap}.logo span{color:#ff6b22}
+.search{flex:1}.search input{width:100%;background:#171a22;border:1px solid #2a2e3a;border-radius:13px;padding:12px;color:white}
+.hero{padding:55px 0 35px}.eyebrow{color:#ff9a60;letter-spacing:.2em;font-size:11px;font-weight:800}
+h1{font:700 clamp(45px,10vw,85px)/.9 Georgia,serif;margin:15px 0}h2{font:700 30px Georgia,serif}
+.muted{color:#9098aa}
+.btn{border:1px solid #2a2f3c;background:#151820;color:#fff;border-radius:12px;padding:11px 14px}
+.primary{background:#ff6b22;color:#111;border-color:#ff6b22;font-weight:800}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:13px}
+.card{background:#12151c;border:1px solid #252a35;border-radius:15px;overflow:hidden;cursor:pointer}
+.photo{aspect-ratio:2/3;background:radial-gradient(circle at 70% 20%,#ffb86a55,transparent 30%),linear-gradient(135deg,#272d3a,#0b0d12);display:flex;align-items:end;padding:13px;position:relative}
+.photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.photo strong{position:relative;font:700 20px Georgia,serif;text-shadow:0 3px 15px #000}
+.info{padding:11px}.info b{display:block;margin-bottom:5px}.info small{color:#929aab}
+nav{position:fixed;bottom:0;left:0;right:0;background:#0c0e13ee;backdrop-filter:blur(18px);border-top:1px solid #242936;display:flex;justify-content:center;z-index:20}
+nav button{background:none;border:0;color:#8e96a7;padding:12px 15px;font-size:12px}nav button.active{color:#ff8d52}
+.panel{background:#11141b;border:1px solid #272c38;border-radius:17px;padding:18px;margin-top:18px}
+.modal{position:fixed;inset:0;background:#000c;z-index:30;display:none;align-items:flex-end;justify-content:center}
+.modal.show{display:flex}.sheet{background:#11141b;border:1px solid #303644;border-radius:22px 22px 0 0;width:min(800px,100%);max-height:92vh;overflow:auto;padding:20px}
+.field{display:flex;flex-direction:column;gap:6px;margin:10px 0}.field label{font-size:12px;color:#9ba3b2}.field input,.field textarea,.field select{background:#0b0e14;color:white;border:1px solid #2b3040;border-radius:10px;padding:11px}textarea{min-height:100px}
+@media(min-width:800px){nav{position:static;background:none;border:0;justify-content:flex-start;margin:15px 0}.modal{align-items:center}.sheet{border-radius:20px}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="modal" id="modal"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="module">
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
+const {createClient} = window.supabase;
+const db=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let movies=[], query="", currentView="home", user=null;
+
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+const statusClass=s=>s==="Watched"||s==="Rewatching"?"watched":"";
+function nav(){return `<nav>
+<button class="${currentView==='home'?'active':''}" onclick="go('home')">⌂ Home</button>
+<button class="${currentView==='movies'?'active':''}" onclick="go('movies')">🎬 Movies</button>
+<button onclick="addMovie()">＋ Add</button>
+<button class="${currentView==='stats'?'active':''}" onclick="go('stats')">◉ Stats</button>
+<button onclick="logout()">⚙ Account</button></nav>`}
+function card(m){return `<article class="card" onclick="openMovie('${m.id}')"><div class="photo">${m.signature_photo_url?`<img src="${esc(m.signature_photo_url)}">`:''}<strong>${esc(m.title)}</strong></div><div class="info"><b>${esc(m.title)}</b><small>${m.year||''} · ${esc(m.language||'Other')}</small><br><small>${esc(m.status)} ${m.rating!=null?'· ★ '+m.rating:''}</small></div></article>`}
+async function load(){const {data:session}=await db.auth.getSession();user=session.session?.user||null;if(!user)return login();const {data,error}=await db.from('movies').select('*').order('year',{ascending:false});if(error){root.innerHTML=`<div class="app"><h2>Database not ready</h2><p class="muted">${esc(error.message)}</p><p>Run <b>supabase_schema.sql</b> in your Supabase SQL Editor.</p></div>`;return}movies=data||[];render()}
+function login(){root.innerHTML=`<div class="app"><section class="hero"><div class="eyebrow">YOUR PERSONAL CINEMA ARCHIVE</div><h1>VARUN'S<br>MOVIE CHOICE</h1><p class="muted">Your films, your memories, everywhere.</p><div class="panel"><h2>Enter your movie world</h2><div class="field"><label>Email</label><input id="email" type="email" placeholder="you@example.com"></div><div class="actions"><button class="btn primary" onclick="signin()">Send magic link</button></div><p class="muted">We'll email you a secure sign-in link.</p></div></section></div>`}
+async function signin(){const email=document.getElementById('email').value.trim();if(!email)return alert('Enter your email.');const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});alert(error?error.message:'Check your email for the sign-in link.')}
+function render(){let list=movies.filter(m=>(m.title+' '+m.language+' '+(m.director||'')+' '+(m.cast_members||[]).join(' ')+' '+(m.genres||[]).join(' ')).toLowerCase().includes(query.toLowerCase()));let watched=movies.filter(m=>m.status==='Watched'||m.status==='Rewatching').length;root.innerHTML=`<div class="app"><header><div class="logo">Varun's <span>Movie Choice</span></div><div class="search"><input placeholder="Search movies, people, genres..." value="${esc(query)}" oninput="query=this.value;render()"></div></header>${currentView==='home'?`<section class="hero"><div class="eyebrow">A PERSONAL CINEMA ARCHIVE</div><h1>YOUR<br>MOVIE WORLD</h1><p class="muted">Every movie you watch becomes part of your story.</p><div class="actions"><button class="btn primary" onclick="addMovie()">＋ Log a movie</button><button class="btn" onclick="go('movies')">Explore ${movies.length} films</button></div></section>`:''}<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center"><div><h2>${currentView==='stats'?'Your Stats':'Your Movies'}</h2><div class="muted">${watched} watched · ${movies.length-watched} to explore</div></div><button class="btn primary" onclick="addMovie()">＋</button></div></div>${currentView==='stats'?`<div class="panel"><h3>Total films</h3><h1>${movies.length}</h1><h3>Watched</h3><h1>${watched}</h1></div>`:`<div class="grid" style="margin-top:16px">${list.map(card).join('')||'<div class="panel">No movies yet. Add your first one.</div>'}</div>`}${nav()}</div>`}
+window.go=v=>{currentView=v;render()}
+window.signin=signin; window.logout=async()=>{await db.auth.signOut();login()}
+window.addMovie=()=>editMovie({title:'',year:new Date().getFullYear(),language:'Telugu',genres:['Drama'],status:'Want to Watch',rating:null,cast_members:[],tags:[],rewatch_count:0,liked_most:'',opinion:'',favourite_scene:'',notes:'',storyline:'',director:''},true)
+window.openMovie=id=>{const m=movies.find(x=>x.id===id);if(m)editMovie(m,false)}
+window.editMovie=(m,isNew)=>{document.getElementById('modal').innerHTML=`<div class="sheet"><div style="display:flex;justify-content:space-between"><h2>${isNew?'Add movie':'Edit movie'}</h2><button class="btn" onclick="closeModal()">✕</button></div><div class="field"><label>Title</label><input id="t" value="${esc(m.title)}"></div><div class="field"><label>Year</label><input id="y" type="number" value="${m.year||''}"></div><div class="field"><label>Language</label><input id="l" value="${esc(m.language)}"></div><div class="field"><label>Genres</label><input id="g" value="${esc((m.genres||[]).join(', '))}"></div><div class="field"><label>Director</label><input id="d" value="${esc(m.director)}"></div><div class="field"><label>Cast</label><input id="c" value="${esc((m.cast_members||[]).join(', '))}"></div><div class="field"><label>Status</label><select id="s">${['Want to Watch','Watching','Watched','Rewatching','Dropped'].map(x=>`<option ${x===m.status?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Your rating / 10</label><input id="r" type="number" min="0" max="10" step=".1" value="${m.rating??''}"></div><div class="field"><label>Date watched</label><input id="wd" type="date" value="${m.date_watched||''}"></div><div class="field"><label>Signature photo</label><input id="photo" type="file" accept="image/*"></div><div class="field"><label>What did I like most?</label><textarea id="liked">${esc(m.liked_most)}</textarea></div><div class="field"><label>My opinion</label><textarea id="op">${esc(m.opinion)}</textarea></div><div class="field"><label>Favourite scene</label><textarea id="scene">${esc(m.favourite_scene)}</textarea></div><div class="field"><label>Notes</label><textarea id="notes">${esc(m.notes)}</textarea></div><div class="actions"><button class="btn primary" onclick="saveMovie('${m.id||''}',${isNew})">Save movie</button><button class="btn" onclick="closeModal()">Cancel</button></div></div>`;document.getElementById('modal').classList.add('show')}
+window.closeModal=()=>document.getElementById('modal').classList.remove('show')
+window.saveMovie=async(id,isNew)=>{let m={title:document.getElementById('t').value.trim(),year:+document.getElementById('y').value,language:document.getElementById('l').value,genres:document.getElementById('g').value.split(',').map(x=>x.trim()).filter(Boolean),director:document.getElementById('d').value,cast_members:document.getElementById('c').value.split(',').map(x=>x.trim()).filter(Boolean),status:document.getElementById('s').value,rating:document.getElementById('r').value===''?null:+document.getElementById('r').value,date_watched:document.getElementById('wd').value||null,liked_most:document.getElementById('liked').value,opinion:document.getElementById('op').value,favourite_scene:document.getElementById('scene').value,notes:document.getElementById('notes').value,user_id:user.id};if(!m.title)return alert('Enter a title.');const file=document.getElementById('photo').files[0];if(file){const path=user.id+'/'+(isNew?crypto.randomUUID():id)+'.jpg';const {error}=await db.storage.from('movie-signatures').upload(path,file,{upsert:true,contentType:file.type});if(error)return alert(error.message);m.signature_photo_url=db.storage.from('movie-signatures').getPublicUrl(path).data.publicUrl}let result=isNew?await db.from('movies').insert(m):await db.from('movies').update(m).eq('id',id);if(result.error)return alert(result.error.message);closeModal();load()}
+load()
+</script>
+</body></html>
