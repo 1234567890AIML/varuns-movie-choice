@@ -25,3 +25,6 @@ The publishable key is designed for browser use. Never put a Supabase secret/ser
 ## 5. Hosting
 The frontend can be hosted free on Cloudflare Pages or GitHub Pages.
 After deployment, add the deployed domain to Supabase Authentication URL configuration.
+
+<img width="960" height="540" alt="image" src="https://github.com/user-attachments/assets/9a69c133-b23f-429b-999b-bbb01022e69a" />
+<img width="960" height="540" alt="image" src="https://github.com/user-attachments/assets/7f8cd96c-8bac-4423-9569-f57c456bf27f" />
